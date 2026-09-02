@@ -38,5 +38,8 @@ app.post('/api/stop', (req, res) => {
 
 // Start Server
 app.listen(PORT, () => {
-    console.log(`🚀 Gemini Generator Dashboard running on port ${PORT}`);
+    console.log(`Gemini Generator Server running on port ${PORT}`);
+    
+    // Auto-start the generator on boot so it runs continuously on Railway
+    generator.start();
 });
