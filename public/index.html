@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Link Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans min-h-screen p-8">
+    <div class="max-w-4xl mx-auto space-y-8">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-400">Gemini Generator</h1>
+                <p class="text-gray-400">Grizzly SMS - Continuous Auto Hunter</p>
+            </div>
+            <div id="status-badge" class="px-4 py-2 rounded-full text-sm font-semibold bg-gray-600 text-white">
+                Status: CHECKING...
+            </div>
+        </header>
+
+        <!-- Control Panel -->
+        <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+            <h2 class="text-xl font-semibold mb-4">Control Panel</h2>
+            <div class="flex items-center space-x-4">
+                <button id="btn-start" onclick="startGenerator()" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-bold shadow-md transition">
+                    ▶ Turn ON
+                </button>
+                <button id="btn-stop" onclick="stopGenerator()" class="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold shadow-md transition opacity-50 cursor-not-allowed" disabled>
+                    ■ Turn OFF
+                </button>
+            </div>
+            
+            <div class="mt-6 p-4 bg-gray-900 rounded-lg text-sm font-mono text-gray-300">
+                <p>Phase: <span id="lbl-phase" class="text-yellow-400">IDLE</span></p>
+                <p>Phone: <span id="lbl-phone" class="text-blue-300">-</span></p>
+                <p>Attempts: <span id="lbl-attempts" class="text-purple-400">0</span></p>
+                <p>Error: <span id="lbl-error" class="text-red-400">-</span></p>
+            </div>
+        </section>
+
+        <!-- Live Terminal Logs -->
+        <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+            <h2 class="text-xl font-semibold mb-4">Terminal Logs</h2>
+            <div id="logs-container" class="bg-gray-900 p-4 rounded-lg text-sm font-mono text-green-400 h-64 overflow-y-auto whitespace-pre-wrap border border-gray-700">
+                Mengecek log...
+            </div>
+        </section>
+
+        <!-- Links Table -->
+        <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+            <h2 class="text-xl font-semibold mb-4 flex justify-between">
+                <span>Generated Links</span>
+                <span class="text-sm bg-blue-600 px-3 py-1 rounded-full" id="lbl-total">Total: 0</span>
+            </h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-700 text-gray-300">
+                        <tr>
+                            <th class="p-3 rounded-tl-lg">Date</th>
+                            <th class="p-3">Phone</th>
+                            <th class="p-3 rounded-tr-lg">Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="links-tbody" class="divide-y divide-gray-700">
+                        <tr><td colspan="3" class="p-4 text-center text-gray-500">No links found yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        let isRunning = false;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                isRunning = data.running;
+                
+                // Update Badge
+                const badge = document.getElementById('status-badge');
+                if (isRunning) {
+                    badge.className = "px-4 py-2 rounded-full text-sm font-semibold bg-green-600 text-white animate-pulse";
+                    badge.innerText = "Status: RUNNING";
+                    
+                    document.getElementById('btn-start').disabled = true;
+                    document.getElementById('btn-start').classList.add('opacity-50', 'cursor-not-allowed');
+                    document.getElementById('btn-stop').disabled = false;
+                    document.getElementById('btn-stop').classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    badge.className = "px-4 py-2 rounded-full text-sm font-semibold bg-gray-600 text-white";
+                    badge.innerText = "Status: STOPPED";
+
+                    document.getElementById('btn-start').disabled = false;
+                    document.getElementById('btn-start').classList.remove('opacity-50', 'cursor-not-allowed');
+                    document.getElementById('btn-stop').disabled = true;
+                    document.getElementById('btn-stop').classList.add('opacity-50', 'cursor-not-allowed');
+                }
+
+                // Update info
+                document.getElementById('lbl-phase').innerText = data.phase || 'IDLE';
+                document.getElementById('lbl-phone').innerText = data.phone || '-';
+                document.getElementById('lbl-attempts').innerText = data.attempts || '0';
+                document.getElementById('lbl-error').innerText = data.error || '-';
+                
+            } catch(e) {
+                console.error("Failed to fetch status");
+            }
+        }
+
+        async function fetchLinks() {
+            try {
+                const res = await fetch('/api/links');
+                const links = await res.json();
+                
+                document.getElementById('lbl-total').innerText = `Total: ${links.length}`;
+
+                const tbody = document.getElementById('links-tbody');
+                if (links.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">No links found yet.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = links.reverse().map(l => `
+                    <tr class="hover:bg-gray-750 transition">
+                        <td class="p-3 text-gray-400 whitespace-nowrap">${new Date(l.date).toLocaleString()}</td>
+                        <td class="p-3 text-blue-300 whitespace-nowrap">+${l.phone}</td>
+                        <td class="p-3">
+                            <a href="${l.link}" target="_blank" class="text-green-400 hover:underline break-all">${l.link}</a>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch(e) {
+                console.error("Failed to fetch links");
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const logs = await res.json();
+                const container = document.getElementById('logs-container');
+                if (logs.length > 0) {
+                    container.innerText = logs.join('\n');
+                } else {
+                    container.innerText = "Tidak ada log aktif.";
+                }
+            } catch(e) {
+                console.error("Failed to fetch logs");
+            }
+        }
+
+        async function startGenerator() {
+            await fetch('/api/start', { method: 'POST' });
+            fetchStatus();
+        }
+
+        async function stopGenerator() {
+            await fetch('/api/stop', { method: 'POST' });
+            fetchStatus();
+        }
+
+        // Auto refresh
+        setInterval(fetchStatus, 2000);
+        setInterval(fetchLinks, 5000);
+        setInterval(fetchLogs, 2000);
+
+        // Initial load
+        fetchStatus();
+        fetchLinks();
+        fetchLogs();
+    </script>
+</body>
+</html>
